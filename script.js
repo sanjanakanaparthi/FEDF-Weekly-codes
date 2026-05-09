@@ -1,179 +1,85 @@
-let students = [];
+let vdomState = { h: "00", m: "00", s: "00" };
+let intervalId = null; // ✅ important fix
 
-// -----------------------------
-// INITIAL DATA
-// -----------------------------
-for (let i = 1; i <= 50; i++) {
-  students.push({
-    id: i,
-    name: "Student " + i,
-    present: false
-  });
+function getTime() {
+    const now = new Date();
+    return {
+        h: String(now.getHours()).padStart(2, '0'),
+        m: String(now.getMinutes()).padStart(2, '0'),
+        s: String(now.getSeconds()).padStart(2, '0')
+    };
 }
 
-// -----------------------------
-// RENDER TABLE
-// -----------------------------
-function render(data) {
-  const table = document.getElementById("tableBody");
-  table.innerHTML = "";
-
-  data.forEach((s, index) => {
-    const row = document.createElement("tr");
-
-    row.innerHTML = `
-      <td>${s.id}</td>
-      <td>${s.name}</td>
-      <td>${s.present ? "Present" : "Absent"}</td>
-      <td>
-        <button onclick="deleteStudent(${index})">Delete</button>
-      </td>
-    `;
-
-    table.appendChild(row);
-  });
+// Stop previous interval
+function clearClock() {
+    if (intervalId) clearInterval(intervalId);
 }
 
-window.onload = () => {
-  render(students);
-};
+// 🔴 STANDARD DOM (all blink)
+function useDOM() {
+    clearClock();
 
-// -----------------------------
-// ADD STUDENT
-// -----------------------------
-function addStudent() {
-  const id = document.getElementById("id").value;
-  const name = document.getElementById("name").value;
-  const present = document.getElementById("status").value === "true";
+    document.getElementById("status").innerText =
+        "Mode: Standard DOM (All updating)";
 
-  if (!id || !name) {
-    alert("Enter all fields");
-    return;
-  }
+    intervalId = setInterval(() => {
+        const time = getTime();
 
-  students.push({ id, name, present });
-  render(students);
+        document.getElementById("hour").innerText = time.h;
+        document.getElementById("min").innerText = time.m;
+        document.getElementById("sec").innerText = time.s;
+
+        // Blink ALL
+        document.querySelectorAll("span").forEach(el => {
+            el.classList.add("red-blink");
+            setTimeout(() => el.classList.remove("red-blink"), 300);
+        });
+
+    }, 1000);
 }
 
-// -----------------------------
-// UPDATE STUDENT
-// -----------------------------
-function updateStudent() {
-  const id = document.getElementById("id").value;
-  const name = document.getElementById("name").value;
-  const present = document.getElementById("status").value === "true";
+// 🟢 VIRTUAL DOM (ONLY seconds blink)
+function useVDOM() {
+    clearClock();
 
-  const index = students.findIndex(s => s.id == id);
+    document.getElementById("status").innerText =
+        "Mode: Virtual DOM (Only seconds update)";
 
-  if (index !== -1) {
-    students[index] = { id, name, present };
-    render(students);
+    intervalId = setInterval(() => {
+        const time = getTime();
 
-    setTimeout(() => {
-      document.getElementById("tableBody").rows[index]
-        .classList.add("updated");
-    }, 50);
+        // Only update if changed
+        if (time.h !== vdomState.h) {
+            document.getElementById("hour").innerText = time.h;
+        }
 
-  } else {
-    alert("Student not found!");
-  }
+        if (time.m !== vdomState.m) {
+            document.getElementById("min").innerText = time.m;
+        }
+
+        if (time.s !== vdomState.s) {
+            updateSec(time.s); // ✅ only seconds blink
+        }
+
+        vdomState = time;
+
+    }, 1000);
 }
 
-// -----------------------------
-// DELETE
-// -----------------------------
-function deleteStudent(index) {
-  students.splice(index, 1);
-  render(students);
+// Only seconds highlight
+function updateSec(value) {
+    const el = document.getElementById("sec");
+    el.innerText = value;
+
+    el.classList.add("green-blink");
+    setTimeout(() => el.classList.remove("green-blink"), 300);
 }
 
-// -----------------------------
-// DOM UPDATE (updates ALL rows)
-// -----------------------------
-function updateDOM() {
-  console.time("DOM Update");
-
-  const table = document.getElementById("tableBody");
-
-  students.forEach((s, index) => {
-    s.present = Math.random() > 0.5;
-
-    const row = table.rows[index];
-    if (row) {
-      row.cells[2].textContent =
-        s.present ? "Present" : "Absent";
-
-      row.classList.add("updated");
-    }
-  });
-
-  console.timeEnd("DOM Update");
-}
-
-// -----------------------------
-// VIRTUAL DOM
-// -----------------------------
-let oldVDOM = [];
-
-function createVDOM(data) {
-  return data.map(s => ({
-    id: s.id,
-    status: s.present ? "Present" : "Absent"
-  }));
-}
-
-function diff(oldVDOM, newVDOM) {
-  let changes = [];
-
-  newVDOM.forEach((newNode, index) => {
-    const oldNode = oldVDOM[index];
-
-    if (!oldNode || oldNode.status !== newNode.status) {
-      changes.push({ index, status: newNode.status });
-    }
-  });
-
-  return changes;
-}
-
-function patchDOM(changes) {
-  const table = document.getElementById("tableBody");
-
-  changes.forEach(change => {
-    const row = table.rows[change.index];
-
-    if (row) {
-      row.cells[2].textContent = change.status;
-      row.classList.add("updated");
-    }
-  });
-}
-
-// -----------------------------
-// VDOM UPDATE (updates ONLY FEW rows)
-// -----------------------------
-function updateVDOM() {
-  console.time("VDOM Update");
-
-  // change ONLY 5 random students
-  for (let i = 0; i < 5; i++) {
-    let index = Math.floor(Math.random() * students.length);
-    students[index].present = !students[index].present;
-  }
-
-  const newVDOM = createVDOM(students);
-
-  if (oldVDOM.length === 0) {
-    oldVDOM = createVDOM(students);
-  }
-
-  const changes = diff(oldVDOM, newVDOM);
-
-  console.log("Changed rows:", changes.length);
-
-  patchDOM(changes);
-
-  oldVDOM = newVDOM;
-
-  console.timeEnd("VDOM Update");
-}
+/*
+<!-- TASKS:
+1. Add toggle button (DOM <-> VDOM switch)
+2. Show performance counter
+3. Add milliseconds support
+4. Convert to component-based design
+-->
+*/
